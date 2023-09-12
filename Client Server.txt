@@ -1,0 +1,113 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+
+#define NO_OF_CLIENTS 5
+#define PORT_NUMBER 8080
+
+int stringCompare(char *str1, char *str2)
+{
+   while (*str1 == *str2)
+   {
+      if (*str1 == '\0' || *str2 == '\0')
+         break;
+         
+      str1++;
+      str2++;
+   }
+
+   if (*str1 == '\0' && *str2 == '\0')
+      return 0;
+   else
+      return -1;
+}
+
+void handleClient(int clientSocket)
+{
+    char buffer[256];
+    while(1)
+    {
+        int bytes_received = recv(clientSocket, buffer, sizeof(buffer), 0);
+        if(bytes_received <= 0)
+        {
+            printf("Error: clinet disocnnected\n");
+            break;
+        }
+
+        if (stringCompare(buffer, "ping") == 0)
+        {
+            printf("'ping' request from client\n");
+            send(clientSocket, "pong", 4, 0);
+        }
+    }
+    close(clientSocket);
+}
+
+int main()
+{
+    int serverSocket, clientSocket;
+    struct sockaddr_in server_addr, client_addr;
+    socklen_t client_addr_len = sizeof(client_addr);
+
+    //creating a server socket
+    serverSocket = socket(AF_INET, SOCK_STREAM, 0);
+    if(serverSocket == -1)
+    {
+        printf("Error: server socket not created.");
+        exit(1);
+    }
+
+    //configuring server address
+    server_addr.sin_family = AF_INET;
+    server_addr.sin_port = htons(PORT_NUMBER);
+    server_addr.sin_addr.s_addr = INADDR_ANY;
+
+    //binding the socket
+    if(bind(serverSocket, (struct sockaddr*)&server_addr, sizeof(server_addr)) == -1)
+    {
+        printf("Error: binding server socket not happened.");
+        exit(2);
+    }
+
+    //listening for incoming connections
+    if(listen(serverSocket, NO_OF_CLIENTS) == -1)
+    {
+        printf("Error: listening for connections is unsuccessful");
+        exit(3);
+    }
+
+    printf("Server listening on port: %d\n", PORT_NUMBER);
+
+    while(1)
+    {
+        //accepting incoming connections
+        clientSocket = accept(serverSocket, (struct sockaddr*)&client_addr, &client_addr_len);
+        if(clientSocket == -1)
+        {
+            printf("Error: error in accepting client connections");
+            continue;
+        }
+
+        //creating a new thread to handle the client connections
+        pid_t pid = fork();
+        if(pid == 0)
+        {
+            handleClient(clientSocket);
+            exit(0);
+        }
+        else
+        {
+            if(pid == -1)
+            {
+                printf("Error: error occured while creating child process");
+            }
+            close(clientSocket); //close the client socket and continue accepting new connections
+        }
+    }
+
+    close(serverSocket);
+    return 0;
+}

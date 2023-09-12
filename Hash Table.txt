@@ -1,0 +1,201 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#define INT16_MAX_VAL 32767
+
+//linked list node
+struct node
+{
+	//both key and value are strings
+	char* key;
+	char* value;
+	
+	struct node* next;
+};
+
+//creating linked list node
+void setNode(struct node* node, char* key, char* value)
+{
+	node->key = key;
+	node->value = value;
+	node->next = NULL;
+	return;
+};
+
+struct hashTable//stores the eleents in from key values
+{
+	int capacity_hashTable; //Capacity of hashTable
+	struct node** array_list; //Array of linked list
+};
+
+void initializeHashTable(struct hashTable* table)
+{
+	table->capacity_hashTable = 50; //set capacity as 50 by default
+	table->array_list = (struct node**)malloc(sizeof(struct node*) * table->capacity_hashTable);
+	return;
+}
+
+int stringLength(char *str)
+{
+    int len = 0;
+    while (*str != '\0')
+    {
+        len++;
+        str++;
+    }
+    return len;
+}
+
+int hashFunction(struct hashTable* table, char* key)
+{
+	int index = 0, factor = 31;
+	for (int i = 0; i < stringLength(key); i++)
+	{
+		index = ((index % table->capacity_hashTable) + (((int)key[i]) * factor) % table->capacity_hashTable) % table->capacity_hashTable;
+		factor = ((factor % INT16_MAX_VAL) * (31 % INT16_MAX_VAL)) % INT16_MAX_VAL;
+	}
+
+	return index;
+}
+
+void insertKey(struct hashTable* table, char* key, char* value)
+{
+	//Getting appropriate bucket index for the given key
+	int index_bucket = hashFunction(table, key);
+	struct node* newNode = (struct node*)malloc(sizeof(struct node));
+
+	setNode(newNode, key, value); //creating a node
+
+	if (table->array_list[index_bucket] == NULL) //no collision since bucket is empty
+	{
+		table->array_list[index_bucket] = newNode;
+	}
+	else //Collision
+	{
+		//inserting at the head of the linked list
+		newNode->next = table->array_list[index_bucket];
+		table->array_list[index_bucket] = newNode;
+	}
+	printf("Inserted item: Index:%d   key:%s   value:%s\n", index_bucket, key, value);
+	return;
+}
+
+int stringCompare(char *str1, char *str2)
+{
+   while (*str1 == *str2)
+   {
+      if (*str1 == '\0' || *str2 == '\0')
+         break;
+         
+      str1++;
+      str2++;
+   }
+
+   if (*str1 == '\0' && *str2 == '\0')
+      return 0;
+   else
+      return -1;
+}
+
+void deleteKey(struct hashTable* table, char* key)
+{
+	//Getting appropriate bucket index for the given key
+	int index_bucket = hashFunction(table, key);
+
+	struct node* prevNode = NULL;
+	struct node* currNode = table->array_list[index_bucket];
+
+	while (currNode != NULL)
+	{
+		//If Key is matched, delete the node
+		if (stringCompare(key, currNode->key) == 0)
+		{
+			if (currNode == table->array_list[index_bucket]) //Deleting head node
+			{
+				table->array_list[index_bucket] = currNode->next;
+			}
+			else //Deleting last node or middle node
+			{
+				prevNode->next = currNode->next;
+			}
+			free(currNode);
+			break;
+		}
+		prevNode = currNode;
+		currNode = currNode->next;
+	}
+	return;
+}
+
+void search_and_print(struct hashTable* table, char* key)
+{
+    char *value = NULL;
+	//Getting appropriate bucket index for the given key
+	int index_bucket = hashFunction(table, key);
+
+	//Head node which is present at above bucket index
+	struct node* headNode = table->array_list[index_bucket];
+	while (headNode != NULL)
+	{
+		if (headNode->key == key) //Key is found in the hashMap
+		{
+		    value = headNode->value;
+		    break;
+		}
+		headNode = headNode->next;
+	}
+
+    if (value == NULL)
+    {
+	    printf("Error: No data found with the Key:%s\n", key);
+    }
+    else
+    {
+        printf("Index:%d   Key:%s   Value:%s\n", index_bucket, key, value);
+    }
+}
+
+/* Test Code */
+int main()
+{
+	//initializing the table
+	struct hashTable* table = (struct hashTable*)malloc(sizeof(struct hashTable));
+	initializeHashTable(table);
+
+    //inserting keys into the table
+    printf("\n\nHash Table:\n");
+    printf("-----------------------------------------------\n");
+	insertKey(table, "111", "abc");
+	insertKey(table, "222", "def");
+	insertKey(table, "333", "ghi");
+	insertKey(table, "444", "jkl");
+	insertKey(table, "555", "mno");
+	insertKey(table, "666", "abc");
+	insertKey(table, "777", "def");
+	insertKey(table, "888", "ghi");
+	insertKey(table, "999", "jkl");
+	insertKey(table, "000", "mno");
+	printf("------------------------------------------------\n\n\n");
+
+    //seraching for a key which is available in the table
+	search_and_print(table, "999");
+	search_and_print(table, "111");
+	search_and_print(table, "555");
+	search_and_print(table, "666");
+	search_and_print(table, "777");
+
+	//searching for a key which is not available in the table
+	search_and_print(table, "123456");
+
+	//Deleting a key
+	deleteKey(table, "444");
+	
+	printf("\nAfter deleting the key, if it is searched,\n");
+	//searching a key which was deleted
+	search_and_print(table, "444");
+	
+	//freeing up the memory
+	free(table);
+
+	return 0;
+}

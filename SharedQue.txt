@@ -1,0 +1,150 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <pthread.h>
+#include <unistd.h>
+
+#define SIZE_OF_QUEUE 10
+#define NUM_OF_READERS 5
+#define NUM_OF_MESSAGES 5
+
+struct SharedQueue
+{
+    char* messages[SIZE_OF_QUEUE];
+    int size;
+    int front;
+    int rear;
+    pthread_mutex_t mutex;
+    pthread_cond_t notEmpty;
+    pthread_cond_t notFull;
+} queue;
+
+void initializeSharedQueue()
+{
+    queue.size = queue.front = queue.rear = 0;
+    //initializing mutex and condition variables
+    pthread_mutex_init(&queue.mutex, NULL);
+    pthread_cond_init(&queue.notEmpty, NULL);
+    pthread_cond_init(&queue.notFull, NULL); 
+}
+
+//user defined string copy function
+void stringCopy(char *t, const char *s)
+{
+    while (*s != '\0')
+    {
+        *t = *s;
+        s++;
+        t++;
+    }
+    *t = '\0';
+}
+
+//user defined string length function
+int stringLength(const char *str)
+{
+    int length = 0;
+    while (*str != '\0')
+    {
+        length++;
+        str++;
+    }
+    return length;
+}
+
+//user defined strdup function
+char* stringDuplicate(const char *src)
+{
+    char *dst = malloc(stringLength(src) + 1); // allocate space dynamically
+    if (dst == NULL)
+    {
+        return NULL;
+    }
+    stringCopy(dst, src);
+    return dst;  
+}
+
+void addMessageToQueue(const char* message)
+{
+    pthread_mutex_lock(&queue.mutex); //mutex lock to serialize the adding and removing operations
+    while(queue.size >= SIZE_OF_QUEUE)
+    {
+        //to make current thread wait if the queue is full
+        pthread_cond_wait(&queue.notFull, &queue.mutex);
+    }
+ 	
+    queue.messages[queue.rear] = stringDuplicate(message); //adding a message to the queue
+    queue.rear = (queue.rear + 1) % SIZE_OF_QUEUE; // increment rear iin circular manner
+    queue.size++;
+    
+    pthread_cond_signal(&queue.notEmpty); //After adding a message to the queue, signal the condition variable 'notEmpty'
+    pthread_mutex_unlock(&queue.mutex); //lock the mutex to allow other threads
+}
+
+char* getMessageFromQueue()
+{
+    pthread_mutex_lock(&queue.mutex); //mutex lock to serialize the adding and removing operations
+
+    while (queue.size <= 0)
+    {
+        pthread_cond_wait(&queue.notEmpty, &queue.mutex);
+    }
+
+    char* message = queue.messages[queue.front];
+    queue.front = (queue.front + 1) % SIZE_OF_QUEUE;
+    queue.size--;
+
+    pthread_cond_signal(&queue.notFull);
+    pthread_mutex_unlock(&queue.mutex);
+
+    return message;
+}
+
+void* writerThread(void* arg)
+{
+    int i;
+    for (i = 0; i < NUM_OF_MESSAGES; i++)
+    {
+        char message[50];
+        snprintf(message, sizeof(message), "Message No: %d", i);
+        addMessageToQueue(message);
+        sleep(1);
+    }
+    pthread_exit(NULL);
+}
+
+void* readerThread(void* arg)
+{
+    while(1)
+    {
+        char* message = getMessageFromQueue();
+        printf("Reader %lu received: %s\n", (unsigned long)pthread_self(), message);
+        free(message);
+    }
+}
+
+int main()
+{
+    initializeSharedQueue();
+
+    pthread_t writer;
+    pthread_create(&writer, NULL, writerThread, NULL);
+
+    pthread_t readers[NUM_OF_READERS];
+    for (int i = 0; i < NUM_OF_READERS; i++)
+    {
+        pthread_create(&readers[i], NULL, readerThread, NULL);
+    }
+
+    pthread_join(writer, NULL);
+
+    for (int i = 0; i < NUM_OF_READERS; i++)
+    {
+        pthread_cancel(readers[i]);
+    }
+
+    pthread_mutex_destroy(&queue.mutex);
+    pthread_cond_destroy(&queue.notEmpty);
+    pthread_cond_destroy(&queue.notFull);
+
+    return 0;
+}
